@@ -7,9 +7,9 @@ AMD64_URL="https://github.com/el3ctr0wqw-cloud/money4band/releases/download/test
 ARM64_URL="https://github.com/el3ctr0wqw-cloud/money4band/releases/download/test/Money4Band-linux-arm64"
 SUDO=""
 
-info() { echo "[INFO] $*"; }
-warn() { echo "[WARN] $*"; }
-fail() { echo "[FAIL] $*"; exit 1; }
+info() { echo "[INFO] $*" >&2; }
+warn() { echo "[WARN] $*" >&2; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
 
 require_sudo() {
   if [[ "${EUID}" -eq 0 ]]; then
@@ -144,10 +144,10 @@ main() {
   bin="$(download_binary_for_arch)"
   info "Launching binary: ${bin}"
   if "${bin}" --autopilot-services; then
-    echo "[STATUS] OK - Money4Band launched successfully with --autopilot-services"
+    echo "[STATUS] OK - Money4Band launched successfully with --autopilot-services" >&2
   else
     code=$?
-    echo "[STATUS] FAIL - Money4Band exited with code ${code}"
+    echo "[STATUS] FAIL - Money4Band exited with code ${code}" >&2
     exit "${code}"
   fi
 }
