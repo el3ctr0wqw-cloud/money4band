@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AMD64_BIN="${ROOT_DIR}/dist-portable/Money4Band-linux-amd64"
-ARM64_BIN="${ROOT_DIR}/dist-portable-arm64/Money4Band-linux-arm64"
+BIN_DIR="${ROOT_DIR}/bin"
+AMD64_URL="https://github.com/el3ctr0wqw-cloud/money4band/releases/download/test/Money4Band-linux-amd64"
+ARM64_URL="https://github.com/el3ctr0wqw-cloud/money4band/releases/download/test/Money4Band-linux-arm64"
 SUDO=""
 
 info() { echo "[INFO] $*"; }
@@ -54,6 +55,28 @@ install_docker_if_missing() {
   fi
 }
 
+ensure_downloader() {
+  if command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    return 0
+  fi
+
+  require_sudo
+  info "Installing curl (downloader dependency)..."
+  if [[ -f /etc/debian_version ]]; then
+    ${SUDO} apt-get update
+    ${SUDO} apt-get install -y curl
+  elif command -v dnf >/dev/null 2>&1; then
+    ${SUDO} dnf -y install curl
+  elif command -v yum >/dev/null 2>&1; then
+    ${SUDO} yum -y install curl
+  else
+    fail "No curl/wget and unsupported distro for auto-install."
+  fi
+}
+
 ensure_docker_running() {
   if docker info >/dev/null 2>&1; then
     info "Docker engine already running."
@@ -78,33 +101,55 @@ ensure_docker_running() {
   fi
 }
 
-select_binary() {
+download_binary_for_arch() {
   local arch
+  local url=""
+  local out_bin=""
   arch="$(uname -m)"
   case "${arch}" in
     x86_64|amd64)
-      [[ -x "${AMD64_BIN}" ]] || fail "Missing amd64 binary: ${AMD64_BIN}. Build it first."
-      echo "${AMD64_BIN}"
+      url="${AMD64_URL}"
+      out_bin="${BIN_DIR}/Money4Band-linux-amd64"
       ;;
     aarch64|arm64)
-      [[ -x "${ARM64_BIN}" ]] || fail "Missing arm64 binary: ${ARM64_BIN}. Build it first."
-      echo "${ARM64_BIN}"
+      url="${ARM64_URL}"
+      out_bin="${BIN_DIR}/Money4Band-linux-arm64"
       ;;
     *)
       fail "Unsupported architecture: ${arch}"
       ;;
   esac
+
+  mkdir -p "${BIN_DIR}"
+  info "Detected architecture: ${arch}"
+  info "Downloading binary from: ${url}"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 3 --connect-timeout 10 -o "${out_bin}" "${url}"
+  else
+    wget -O "${out_bin}" "${url}"
+  fi
+
+  chmod +x "${out_bin}"
+  echo "${out_bin}"
 }
 
 main() {
   info "Working directory: ${ROOT_DIR}"
+  ensure_downloader
   install_docker_if_missing
   ensure_docker_running
 
   local bin
-  bin="$(select_binary)"
+  bin="$(download_binary_for_arch)"
   info "Launching binary: ${bin}"
-  "${bin}" --autopilot-services
+  if "${bin}" --autopilot-services; then
+    echo "[STATUS] OK - Money4Band launched successfully with --autopilot-services"
+  else
+    code=$?
+    echo "[STATUS] FAIL - Money4Band exited with code ${code}"
+    exit "${code}"
+  fi
 }
 
 main "$@"
